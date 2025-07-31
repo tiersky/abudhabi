@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Country Decoder - Abu Dhabi Tourism Agency</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .country-item {
+            transition: all 0.2s ease;
+        }
+        
+        .country-item:hover {
+            transform: translateX(4px);
+        }
+        
+        .country-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .tier-1 {
+            border-left: 4px solid #10b981;
+        }
+        
+        .tier-2 {
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .metric-card {
+            transition: all 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .heatmap-container {
+            position: relative;
+            height: 400px;
+        }
+        
+        .map-container {
+            height: 400px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 250px;
+            }
+            .heatmap-container {
+                height: 300px;
+            }
+            .map-container {
+                height: 300px;
+            }
+        }
+        
+        .spend-indicator {
+            transition: all 0.3s ease;
+        }
+        
+        .spend-indicator:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="px-6 py-4">
+            <h1 class="text-2xl font-bold text-gray-900">
+                <span class="text-blue-600">Country</span> Decoder
+            </h1>
+            <p class="text-sm text-gray-600 mt-1">Strategic Travel Intelligence Dashboard</p>
+        </div>
+    </header>
+
+    <div class="flex h-screen pt-16">
+        <!-- Sidebar -->
+        <aside class="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+            <div class="p-4 sticky top-0 bg-white border-b border-gray-100">
+                <div class="flex gap-2 mb-4">
+                    <button id="tier1Btn" class="flex-1 px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium hover:bg-green-200 transition-colors">
+                        Tier 1
+                    </button>
+                    <button id="tier2Btn" class="flex-1 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg font-medium hover:bg-yellow-200 transition-colors">
+                        Tier 2
+                    </button>
+                    <button id="allBtn" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                        All
+                    </button>
+                </div>
+                <input type="text" id="searchInput" placeholder="Search countries..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            <div id="countryList" class="p-4 space-y-2">
+                <!-- Countries will be populated here -->
+            </div>
+        </aside>
+
+        <!-- Main Dashboard -->
+        <main class="flex-1 overflow-y-auto bg-gray-50">
+            <div id="dashboard" class="p-8">
+                <div class="text-center py-20">
+                    <h2 class="text-2xl font-semibold text-gray-400">Select a country to view insights</h2>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Register Chart.js plugins
+        Chart.register(ChartDataLabels);
+        
+        // Country data
+        const countries = {
+            tier1: [
+                { name: 'UAE', code: 'ae', population: '9.9M', gdp: '$507.1B', departures: '12.1M', salary: '$72,500', income: '$58,900', lat: 23.4241, lng: 53.8478, flightTime: 0.5, distance: 150, avgSpend: 2850, dailyFlights: 42, avgSeats: 285 },
+                { name: 'USA', code: 'us', population: '331.9M', gdp: '$25.46T', departures: '99.7M', salary: '$56,420', income: '$45,284', lat: 37.0902, lng: -95.7129, flightTime: 16, distance: 12800, avgSpend: 3200, dailyFlights: 4, avgSeats: 380 },
+                { name: 'France', code: 'fr', population: '67.8M', gdp: '$2.78T', departures: '28.4M', salary: '$42,000', income: '$34,560', lat: 46.2276, lng: 2.2137, flightTime: 7.5, distance: 5850, avgSpend: 2400, dailyFlights: 2, avgSeats: 320 },
+                { name: 'India', code: 'in', population: '1.42B', gdp: '$3.73T', departures: '28.9M', salary: '$8,200', income: '$6,100', lat: 20.5937, lng: 78.9629, flightTime: 3.5, distance: 2700, avgSpend: 1200, dailyFlights: 14, avgSeats: 280 },
+                { name: 'UK', code: 'gb', population: '67.7M', gdp: '$3.07T', departures: '71.7M', salary: '$44,000', income: '$36,200', lat: 55.3781, lng: -3.4360, flightTime: 8, distance: 6300, avgSpend: 2800, dailyFlights: 3, avgSeats: 350 },
+                { name: 'Italy', code: 'it', population: '58.9M', gdp: '$2.11T', departures: '33.2M', salary: '$35,000', income: '$28,500', lat: 41.8719, lng: 12.5674, flightTime: 6.5, distance: 5100, avgSpend: 2200, dailyFlights: 1, avgSeats: 290 },
+                { name: 'China', code: 'cn', population: '1.41B', gdp: '$17.73T', departures: '154.6M', salary: '$13,200', income: '$10,800', lat: 35.8617, lng: 104.1954, flightTime: 8.5, distance: 6800, avgSpend: 1800, dailyFlights: 2, avgSeats: 340 },
+                { name: 'Saudi Arabia', code: 'sa', population: '35.9M', gdp: '$833.5B', departures: '9.5M', salary: '$64,500', income: '$52,100', lat: 23.8859, lng: 45.0792, flightTime: 2.5, distance: 1950, avgSpend: 2500, dailyFlights: 8, avgSeats: 220 },
+                { name: 'Germany', code: 'de', population: '83.3M', gdp: '$4.26T', departures: '88.5M', salary: '$49,000', income: '$40,100', lat: 51.1657, lng: 10.4515, flightTime: 7, distance: 5600, avgSpend: 2600, dailyFlights: 2, avgSeats: 330 },
+                { name: 'Russia', code: 'ru', population: '143.4M', gdp: '$2.06T', departures: '45.3M', salary: '$14,800', income: '$11,900', lat: 61.5240, lng: 105.3188, flightTime: 6, distance: 4800, avgSpend: 1600, dailyFlights: 1, avgSeats: 300 },
+                { name: 'Kuwait', code: 'kw', population: '4.3M', gdp: '$184.6B', departures: '4.9M', salary: '$71,000', income: '$58,200', lat: 29.3117, lng: 47.4818, flightTime: 1.5, distance: 1200, avgSpend: 2700, dailyFlights: 7, avgSeats: 180 }
+            ],
+            tier2: [
+                { name: 'Egypt', code: 'eg', population: '109.3M', gdp: '$469.1B', departures: '8.3M', salary: '$4,200', income: '$3,100', lat: 26.8206, lng: 30.8025, flightTime: 4.5, distance: 3600, avgSpend: 900, dailyFlights: 3, avgSeats: 260 },
+                { name: 'Kazakhstan', code: 'kz', population: '19.6M', gdp: '$220.6B', departures: '10.4M', salary: '$10,500', income: '$8,200', lat: 48.0196, lng: 66.9237, flightTime: 5, distance: 4000, avgSpend: 1400, dailyFlights: 1, avgSeats: 240 },
+                { name: 'Bahrain', code: 'bh', population: '1.5M', gdp: '$44.4B', departures: '2.1M', salary: '$48,000', income: '$39,200', lat: 26.0667, lng: 50.5577, flightTime: 1, distance: 800, avgSpend: 2300, dailyFlights: 5, avgSeats: 160 },
+                { name: 'Qatar', code: 'qa', population: '2.7M', gdp: '$237.3B', departures: '2.8M', salary: '$88,000', income: '$72,100', lat: 25.3548, lng: 51.1839, flightTime: 1, distance: 800, avgSpend: 3100, dailyFlights: 6, avgSeats: 200 },
+                { name: 'Canada', code: 'ca', population: '38.2M', gdp: '$2.14T', departures: '32.3M', salary: '$52,000', income: '$42,900', lat: 56.1304, lng: -106.3468, flightTime: 15, distance: 12000, avgSpend: 2900, dailyFlights: 1, avgSeats: 380 },
+                { name: 'Romania', code: 'ro', population: '19.0M', gdp: '$301.3B', departures: '8.9M', salary: '$16,200', income: '$13,100', lat: 45.9432, lng: 24.9668, flightTime: 6, distance: 4800, avgSpend: 1300, dailyFlights: 0.5, avgSeats: 270 },
+                { name: 'Oman', code: 'om', population: '4.5M', gdp: '$114.7B', departures: '3.2M', salary: '$45,000', income: '$36,800', lat: 21.4735, lng: 55.9754, flightTime: 1.5, distance: 1200, avgSpend: 2100, dailyFlights: 4, avgSeats: 190 },
+                { name: 'Spain', code: 'es', population: '47.5M', gdp: '$1.40T', departures: '22.4M', salary: '$32,000', income: '$26,100', lat: 40.4637, lng: -3.7492, flightTime: 8, distance: 6400, avgSpend: 2000, dailyFlights: 1, avgSeats: 310 },
+                { name: 'Netherlands', code: 'nl', population: '17.5M', gdp: '$1.01T', departures: '22.1M', salary: '$53,000', income: '$43,500', lat: 52.1326, lng: 5.2913, flightTime: 7.5, distance: 6000, avgSpend: 2700, dailyFlights: 1, avgSeats: 320 },
+                { name: 'Japan', code: 'jp', population: '123.3M', gdp: '$4.23T', departures: '20.1M', salary: '$38,500', income: '$31,700', lat: 36.2048, lng: 138.2529, flightTime: 10, distance: 8000, avgSpend: 2400, dailyFlights: 1, avgSeats: 360 },
+                { name: 'Uzbekistan', code: 'uz', population: '35.3M', gdp: '$80.4B', departures: '6.7M', salary: '$3,800', income: '$2,900', lat: 41.3775, lng: 64.5853, flightTime: 4, distance: 3200, avgSpend: 800, dailyFlights: 0.7, avgSeats: 220 },
+                { name: 'Poland', code: 'pl', population: '37.7M', gdp: '$688.2B', departures: '11.8M', salary: '$18,000', income: '$14,600', lat: 51.9194, lng: 19.1451, flightTime: 6.5, distance: 5200, avgSpend: 1500, dailyFlights: 0.4, avgSeats: 280 },
+                { name: 'South Korea', code: 'kr', population: '51.7M', gdp: '$1.81T', departures: '28.7M', salary: '$35,100', income: '$28,900', lat: 35.9078, lng: 127.7669, flightTime: 9, distance: 7200, avgSpend: 2300, dailyFlights: 1, avgSeats: 340 },
+                { name: 'Armenia', code: 'am', population: '3.0M', gdp: '$19.5B', departures: '1.5M', salary: '$5,800', income: '$4,500', lat: 40.0691, lng: 45.0382, flightTime: 3.5, distance: 2800, avgSpend: 1000, dailyFlights: 0.3, avgSeats: 180 },
+                { name: 'Belgium', code: 'be', population: '11.7M', gdp: '$578.6B', departures: '8.9M', salary: '$47,000', income: '$38,600', lat: 50.5039, lng: 4.4699, flightTime: 7.5, distance: 6000, avgSpend: 2500, dailyFlights: 0.7, avgSeats: 300 }
+            ]
+        };
+
+        // Initialize charts
+        let seasonalityChart, budgetChart, travelerChart, heatmapChart, spendChart, comparisonChart, proximityMap, flightChart;
+
+        // Generate insights based on country
+        function generateInsights(country) {
+            const insights = {
+                'UAE': [
+                    'Strong domestic travel market with high spending power and preference for luxury experiences',
+                    'Peak travel seasons align with cooler months (October-March) and summer holidays',
+                    'Digital-first population with 99% internet penetration drives online booking behavior'
+                ],
+                'USA': [
+                    'Largest outbound travel market globally with diverse destination preferences',
+                    'Summer and winter holiday periods show strongest travel intent to Middle East',
+                    'High value segment seeks unique cultural experiences and luxury hospitality'
+                ],
+                'France': [
+                    'Cultural tourism enthusiasts with strong interest in heritage and culinary experiences',
+                    'Extended vacation periods in July-August create opportunities for longer stays',
+                    'Growing interest in Middle Eastern destinations for winter sun escapes'
+                ],
+                'India': [
+                    'Rapidly growing outbound market with UAE as top international destination',
+                    'Family travel and VFR (Visiting Friends & Relatives) dominate travel patterns',
+                    'Price-sensitive market with peak travel during festival seasons and school holidays'
+                ],
+                'UK': [
+                    'Mature travel market seeking year-round sunshine and cultural experiences',
+                    'Winter months (November-March) show highest interest in Middle East travel',
+                    'Premium segment values authentic experiences and world-class hospitality'
+                ],
+                'default': [
+                    'Growing interest in Middle Eastern destinations for unique cultural experiences',
+                    'Seasonal patterns indicate opportunity for targeted campaign timing',
+                    'Digital marketing channels show highest ROI for this market segment'
+                ]
+            };
+            
+            return insights[country.name] || insights['default'];
+        }
+
+        // Generate seasonal data
+        function generateSeasonalData() {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return months.map(() => Math.floor(Math.random() * 40) + 60);
+        }
+
+        // Generate heatmap data for seasonality
+        function generateHeatmapData() {
+            const weeks = 52;
+            const data = [];
+            for (let i = 0; i < weeks; i++) {
+                // Simulate seasonal patterns with higher interest in winter months
+                const month = Math.floor(i / 4.33);
+                const baseValue = [0, 1, 2, 9, 10, 11].includes(month) ? 70 : 40;
+                data.push(baseValue + Math.random() * 30);
+            }
+            return data;
+        }
+
+        // Calculate tier averages
+        function calculateTierAverage(tier, metric) {
+            const tierCountries = tier === 'tier1' ? countries.tier1 : countries.tier2;
+            const values = tierCountries.map(c => {
+                switch(metric) {
+                    case 'avgSpend': return c.avgSpend;
+                    case 'departures': return parseFloat(c.departures.replace(/[^0-9.]/g, ''));
+                    case 'income': return parseFloat(c.income.replace(/[^0-9.]/g, ''));
+                    default: return 0;
+                }
+            });
+            return values.reduce((a, b) => a + b, 0) / values.length;
+        }
+
+        // Render country list
+        function renderCountryList(filter = 'all') {
+            const countryListEl = document.getElementById('countryList');
+            countryListEl.innerHTML = '';
+            
+            let countriesToShow = [];
+            if (filter === 'tier1') {
+                countriesToShow = countries.tier1;
+            } else if (filter === 'tier2') {
+                countriesToShow = countries.tier2;
+            } else {
+                countriesToShow = [...countries.tier1, ...countries.tier2];
+            }
+            
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            countriesToShow = countriesToShow.filter(country => 
+                country.name.toLowerCase().includes(searchTerm)
+            );
+            
+            countriesToShow.forEach(country => {
+                const tier = countries.tier1.includes(country) ? 'tier-1' : 'tier-2';
+                const div = document.createElement('div');
+                div.className = `country-item ${tier} px-4 py-3 rounded-lg cursor-pointer hover:bg-gray-100`;
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <img src="https://flagcdn.com/w40/${country.code}.png" alt="${country.name}" class="w-8 h-6 object-cover rounded">
+                        <span class="font-medium">${country.name}</span>
+                    </div>
+                `;
+                div.onclick = () => selectCountry(country);
+                countryListEl.appendChild(div);
+            });
+        }
+
+        // Select country and update dashboard
+        function selectCountry(country) {
+            // Update active state
+            document.querySelectorAll('.country-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Update dashboard
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = `
+                <!-- Country Header -->
+                <div class="flex items-center gap-4 mb-8">
+                    <img src="https://flagcdn.com/w80/${country.code}.png" alt="${country.name}" class="w-16 h-12 object-cover rounded-lg shadow-md">
+                    <div>
+                        <h2 class="text-3xl font-bold text-gray-900">${country.name}</h2>
+                        <p class="text-gray-600">Market Intelligence Report</p>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-sm">
+                        <p class="text-sm text-gray-600 mb-1">Population</p>
+                        <p class="text-2xl font-bold text-gray-900">${country.population}</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-sm">
+                        <p class="text-sm text-gray-600 mb-1">GDP</p>
+                        <p class="text-2xl font-bold text-gray-900">${country.gdp}</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-sm">
+                        <p class="text-sm text-gray-600 mb-1">Annual Departures</p>
+                        <p class="text-2xl font-bold text-gray-900">${country.departures}</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-sm">
+                        <p class="text-sm text-gray-600 mb-1">Median Salary</p>
+                        <p class="text-2xl font-bold text-gray-900">${country.salary}</p>
+                    </div>
+                    <div class="metric-card bg-white p-6 rounded-xl shadow-sm">
+                        <p class="text-sm text-gray-600 mb-1">Disposable Income</p>
+                        <p class="text-2xl font-bold text-gray-900">${country.income}</p>
+                    </div>
+                </div>
+
+                <!-- Proximity and Spend Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- Proximity to Abu Dhabi -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Proximity to Abu Dhabi</h3>
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm text-gray-600">Flight Time</span>
+                                <span class="text-xl font-bold text-blue-600">${country.flightTime}h</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-600">Distance</span>
+                                <span class="text-xl font-bold text-gray-900">${country.distance.toLocaleString()} km</span>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-green-500 to-red-500" style="width: ${Math.min(country.flightTime / 20 * 100, 100)}%"></div>
+                            </div>
+                            <span class="text-xs text-gray-500 mt-1">Relative to furthest destination</span>
+                        </div>
+                    </div>
+
+                    <!-- Average Spend Per Traveler -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm col-span-2">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Average Expected Spend</h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <p class="text-3xl font-bold text-gray-900">$${country.avgSpend.toLocaleString()}</p>
+                                <p class="text-sm text-gray-600">per traveler</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-600">Tier ${countries.tier1.includes(country) ? '1' : '2'} Average</p>
+                                <p class="text-xl font-semibold text-gray-700">$${Math.round(calculateTierAverage(countries.tier1.includes(country) ? 'tier1' : 'tier2', 'avgSpend')).toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="spendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seasonality Heatmap -->
+                <div class="bg-white p-6 rounded-xl shadow-sm mb-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Travel Interest Heatmap - Monthly Pattern</h3>
+                    <div class="heatmap-container">
+                        <canvas id="heatmapChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Flight Connectivity Section -->
+                <div class="bg-white p-6 rounded-xl shadow-sm mb-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Flight Connectivity to Abu Dhabi</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-blue-600">${country.dailyFlights}</p>
+                            <p class="text-sm text-gray-600">Daily Flights</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-gray-900">${Math.round(country.dailyFlights * 30)}</p>
+                            <p class="text-sm text-gray-600">Monthly Flights</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-green-600">${country.avgSeats}</p>
+                            <p class="text-sm text-gray-600">Avg. Seats per Flight</p>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 250px;">
+                        <canvas id="flightChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <!-- Seasonality Chart -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Monthly Travel Interest</h3>
+                        <div class="chart-container">
+                            <canvas id="seasonalityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Radar Chart -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Market Comparison vs Tier Average</h3>
+                        <div class="chart-container">
+                            <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Budget Allocation Chart -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Recommended Budget Split</h3>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Total Marketing Budget (USD)</label>
+                            <div class="flex items-center gap-3">
+                                <span class="text-gray-600">$</span>
+                                <input type="text" id="budgetInput" value="1,000,000" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter budget">
+                                <button onclick="updateBudgetChart()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">Update</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="budgetChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Traveler Profile Chart -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Age Distribution of Travelers</h3>
+                        <div class="chart-container">
+                            <canvas id="travelerChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map Visualization -->
+                <div class="bg-white p-6 rounded-xl shadow-sm mb-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Geographic Visualization</h3>
+                    <div id="proximityMap" class="map-container"></div>
+                </div>
+
+                <!-- Strategic Insights -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Strategic Insights</h3>
+                    <ul class="space-y-3">
+                        ${generateInsights(country).map(insight => 
+                            `<li class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span class="text-gray-700">${insight}</span>
+                            </li>`
+                        ).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            // Initialize charts
+            setTimeout(() => {
+                initializeCharts(country);
+            }, 100);
+        }
+
+        // Initialize all charts
+        function initializeCharts(country) {
+            // Destroy existing charts
+            if (seasonalityChart) seasonalityChart.destroy();
+            if (budgetChart) budgetChart.destroy();
+            if (travelerChart) travelerChart.destroy();
+            if (heatmapChart) heatmapChart.destroy();
+            if (spendChart) spendChart.destroy();
+            if (comparisonChart) comparisonChart.destroy();
+            if (flightChart) flightChart.destroy();
+            if (proximityMap) proximityMap.remove();
+
+            // Get tier info
+            const isTier1 = countries.tier1.includes(country);
+            const currentTier = isTier1 ? 'tier1' : 'tier2';
+
+            // Seasonality Chart
+            const seasonalityCtx = document.getElementById('seasonalityChart').getContext('2d');
+            seasonalityChart = new Chart(seasonalityCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Interest Score',
+                        data: generateSeasonalData(),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Travel Interest: ${context.parsed.y}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Seasonality Heatmap
+            const heatmapCtx = document.getElementById('heatmapChart').getContext('2d');
+            const heatmapData = generateHeatmapData();
+            
+            // Create monthly data 
+            const monthlyData = [];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            
+            // Generate a single row of monthly data
+            for (let month = 0; month < 12; month++) {
+                const baseValue = [0, 1, 2, 9, 10, 11].includes(month) ? 70 + Math.random() * 20 : 30 + Math.random() * 20;
+                monthlyData.push({
+                    x: month,
+                    y: 0,
+                    v: baseValue
+                });
+            }
+
+            heatmapChart = new Chart(heatmapCtx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        data: monthlyData,
+                        backgroundColor: function(context) {
+                            const value = context.raw.v;
+                            if (value > 80) return '#dc2626'; // red-600
+                            if (value > 65) return '#f59e0b'; // amber-500
+                            if (value > 50) return '#facc15'; // yellow-400
+                            if (value > 35) return '#84cc16'; // lime-500
+                            return '#22c55e'; // green-500
+                        },
+                        pointRadius: 35,
+                        pointHoverRadius: 38,
+                        pointStyle: 'rect'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                generateLabels: function(chart) {
+                                    return [
+                                        { text: 'Very High (>80%)', fillStyle: '#dc2626' },
+                                        { text: 'High (65-80%)', fillStyle: '#f59e0b' },
+                                        { text: 'Moderate (50-65%)', fillStyle: '#facc15' },
+                                        { text: 'Low (35-50%)', fillStyle: '#84cc16' },
+                                        { text: 'Very Low (<35%)', fillStyle: '#22c55e' }
+                                    ];
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'rect'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${months[context.raw.x]}: ${Math.round(context.raw.v)}% travel interest`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            },
+                            formatter: function(value) {
+                                return Math.round(value.v) + '%';
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: -0.5,
+                            max: 11.5,
+                            title: {
+                                display: true,
+                                text: 'Months',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            },
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    return months[value] || '';
+                                },
+                                font: {
+                                    size: 12
+                                }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            display: false,
+                            min: -0.5,
+                            max: 0.5
+                        }
+                    }
+                }
+            });
+
+            // Average Spend Chart
+            const spendCtx = document.getElementById('spendChart').getContext('2d');
+            const tierAvgSpend = calculateTierAverage(currentTier, 'avgSpend');
+            
+            spendChart = new Chart(spendCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['This Market', `Tier ${isTier1 ? '1' : '2'} Average`, 'All Markets Average'],
+                    datasets: [{
+                        data: [
+                            country.avgSpend,
+                            tierAvgSpend,
+                            calculateTierAverage('tier1', 'avgSpend') * 0.6 + calculateTierAverage('tier2', 'avgSpend') * 0.4
+                        ],
+                        backgroundColor: ['#3b82f6', '#10b981', '#6b7280'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => '$' + Math.round(value).toLocaleString(),
+                            font: {
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Comparison Radar Chart
+            const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+            const countryIncome = parseFloat(country.income.replace(/[^0-9.]/g, ''));
+            const countryDepartures = parseFloat(country.departures.replace(/[^0-9.]/g, ''));
+            const tierAvgIncome = calculateTierAverage(currentTier, 'income');
+            const tierAvgDepartures = calculateTierAverage(currentTier, 'departures');
+
+            comparisonChart = new Chart(comparisonCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['Avg Spend', 'Income Level', 'Departures', 'Market Size', 'Digital Readiness'],
+                    datasets: [{
+                        label: country.name,
+                        data: [
+                            (country.avgSpend / 3500) * 100,
+                            (countryIncome / 80000) * 100,
+                            Math.min((countryDepartures / 100), 100),
+                            Math.min((parseFloat(country.population.replace(/[^0-9.]/g, '')) / 100), 100),
+                            70 + Math.random() * 30
+                        ],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#3b82f6'
+                    }, {
+                        label: `Tier ${isTier1 ? '1' : '2'} Average`,
+                        data: [
+                            (tierAvgSpend / 3500) * 100,
+                            (tierAvgIncome / 80000) * 100,
+                            Math.min((tierAvgDepartures / 100), 100),
+                            50,
+                            75
+                        ],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#10b981'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        datalabels: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                display: false
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Budget Allocation Chart
+            const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+            const percentages = [35, 30, 20, 10, 5];
+            const totalBudget = 1000000; // Default budget
+            
+            budgetChart = new Chart(budgetCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Social Media', 'Search Ads', 'Content Marketing', 'Influencers', 'Other'],
+                    datasets: [{
+                        data: percentages,
+                        backgroundColor: [
+                            '#3b82f6',
+                            '#10b981',
+                            '#f59e0b',
+                            '#8b5cf6',
+                            '#6b7280'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    const currentBudget = parseFloat(document.getElementById('budgetInput')?.value.replace(/,/g, '') || totalBudget);
+                                    return data.labels.map((label, i) => {
+                                        const amount = (percentages[i] / 100) * currentBudget;
+                                        return {
+                                            text: `${label}: $${amount.toLocaleString()}`,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 14
+                            },
+                            formatter: (value) => value + '%'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const currentBudget = parseFloat(document.getElementById('budgetInput')?.value.replace(/,/g, '') || totalBudget);
+                                    const amount = (context.parsed / 100) * currentBudget;
+                                    return `${context.label}: ${context.parsed}% ($${amount.toLocaleString()})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Traveler Profile Chart
+            const travelerCtx = document.getElementById('travelerChart').getContext('2d');
+            travelerChart = new Chart(travelerCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
+                    datasets: [{
+                        label: 'Percentage',
+                        data: [15, 35, 25, 15, 8, 2],
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + '%',
+                            font: {
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 40,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Initialize Map
+            proximityMap = L.map('proximityMap').setView([24.4539, 54.3773], 3);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: ' OpenStreetMap contributors'
+            }).addTo(proximityMap);
+
+            // Abu Dhabi marker
+            L.marker([24.4539, 54.3773])
+                .addTo(proximityMap)
+                .bindPopup('<b>Abu Dhabi</b><br>Tourism Destination')
+                .openPopup();
+
+            // Country marker
+            const countryMarker = L.marker([country.lat, country.lng])
+                .addTo(proximityMap)
+                .bindPopup(`<b>${country.name}</b><br>Flight time: ${country.flightTime}h<br>Distance: ${country.distance}km`);
+
+            // Draw flight path
+            const flightPath = L.polyline([
+                [24.4539, 54.3773],
+                [country.lat, country.lng]
+            ], {
+                color: '#3b82f6',
+                weight: 3,
+                opacity: 0.7,
+                dashArray: '10, 10'
+            }).addTo(proximityMap);
+
+            // Fit map to show both points
+            proximityMap.fitBounds([[24.4539, 54.3773], [country.lat, country.lng]], {
+                padding: [50, 50]
+            });
+
+            // Flight Capacity Chart
+            const flightCtx = document.getElementById('flightChart').getContext('2d');
+            const monthlyCapacity = country.dailyFlights * country.avgSeats * 30;
+            const allCountries = [...countries.tier1, ...countries.tier2];
+            const sortedByFlights = allCountries.sort((a, b) => b.dailyFlights - a.dailyFlights).slice(0, 10);
+            
+            flightChart = new Chart(flightCtx, {
+                type: 'bar',
+                data: {
+                    labels: sortedByFlights.map(c => c.name),
+                    datasets: [{
+                        label: 'Daily Flights',
+                        data: sortedByFlights.map(c => c.dailyFlights),
+                        backgroundColor: sortedByFlights.map(c => c.name === country.name ? '#3b82f6' : '#e5e7eb'),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const c = sortedByFlights[context.dataIndex];
+                                    return `Monthly capacity: ${(c.dailyFlights * c.avgSeats * 30).toLocaleString()} seats`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value,
+                            display: function(context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            font: {
+                                weight: 'bold',
+                                size: 10
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + ' flights';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                autoSkip: false,
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Event listeners
+        document.getElementById('tier1Btn').addEventListener('click', () => renderCountryList('tier1'));
+        document.getElementById('tier2Btn').addEventListener('click', () => renderCountryList('tier2'));
+        document.getElementById('allBtn').addEventListener('click', () => renderCountryList('all'));
+        document.getElementById('searchInput').addEventListener('input', () => renderCountryList('all'));
+
+        // Update budget chart when budget changes
+        function updateBudgetChart() {
+            const budgetInput = document.getElementById('budgetInput');
+            const value = budgetInput.value.replace(/,/g, '');
+            
+            if (!isNaN(value) && value > 0) {
+                // Format the input with commas
+                budgetInput.value = parseFloat(value).toLocaleString();
+                
+                // Update the chart legend
+                if (budgetChart) {
+                    budgetChart.update();
+                }
+            }
+        }
+
+        // Initialize
+        renderCountryList('all');
+    </script>
+</body>
+</html>
